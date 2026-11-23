@@ -25,8 +25,8 @@ body {
   padding: 24px 16px 48px;
 }
 .wrap { max-width: 1100px; min-height: calc(100vh - 72px); margin: 0 auto; display: flex; flex-direction: column; }
-main { flex: 1; display: flex; flex-direction: column; }
-main > .card { flex: 1; }
+main { position: relative; flex: 1; display: flex; flex-direction: column; }
+main > .card { flex: 1; padding-bottom: 52px; }
 header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 20px; color: var(--muted); font-size: 14px; }
 .progress { display: flex; gap: 6px; }
 .progress span { width: 28px; height: 6px; border-radius: 3px; background: var(--border); }
@@ -72,6 +72,7 @@ pre.console { margin: 0; border: 0; border-radius: 0; min-height: 90px; white-sp
 .term-cmd { color: var(--muted); }
 .term-ok { color: var(--accent); }
 .term-err { color: var(--danger); }
+.term-warn { color: var(--warn); }
 .term-hint { padding: 8px 14px; color: var(--warn); border-top: 1px solid var(--border); }
 pre.terminal { font-size: 18px; line-height: 1.9; padding: 20px; }
 pre { background: #0a0e13; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; }
@@ -159,9 +160,8 @@ ul.achievements li::before { content: "[x] "; color: var(--accent); }
 .troll { max-width: 100%; max-height: 320px; border-radius: 8px; }
 .mock { color: var(--danger); font-size: 18px; }
 .clue { color: var(--warn); }
-.reset { background: none; border: none; color: var(--muted); font-size: 12px; padding: 0; text-decoration: underline; }
+.reset { position: absolute; right: 18px; bottom: 14px; background: none; border: none; color: var(--muted); font-size: 12px; padding: 0; text-decoration: underline; }
 .reset:hover:not(:disabled) { background: none; color: var(--text); }
-footer { margin-top: 20px; text-align: right; }
 @media (max-width: 480px) { .password { font-size: 22px; } }
 </style>
 </head>
@@ -241,11 +241,9 @@ footer { margin-top: 20px; text-align: right; }
         </div>
       </div>
     </section>
+    <button type="button" class="reset" id="reset-btn">reset progress</button>
   </main>
 
-  <footer>
-    <button type="button" class="reset" id="reset-btn">reset progress</button>
-  </footer>
 </div>
 
 <script>
@@ -467,6 +465,41 @@ int main() {
     return lines.join("\n");
   }
 
+  var ID_LINE = ORIGINAL_LINES.indexOf("uint32_t id;");
+  var INIT_LINE = ORIGINAL_LINES.indexOf("SensorPacket pkt{i, 0};");
+  var DIVISION_LINE = ORIGINAL_LINES.indexOf("pkt.value = (i + 1) / decltype(pkt.value)(4);");
+
+  var NON_OPTIMAL_MEMBERS = [
+    "float value;", "float_t value;", "std::float_t value;", "_Float16 value;", "__fp16 value;",
+    "float value = 0;", "float value{};", "float value = 0.0f;", "using V = float; V value;"
+  ];
+  var NON_OPTIMAL_DIVISIONS = ["4.0", "4.0f", "4.f", "float(4)", "4.0F"]
+    .map(function (d) { return "pkt.value = (i + 1) / " + d + ";"; })
+    .concat([ORIGINAL_LINES[DIVISION_LINE]]);
+  var NON_OPTIMAL_CALIBRATIONS = ["if (pkt.value < 0) {", "if (pkt.value <= 0.0) {", "if (pkt.value <= 0.0f) {", "if (pkt.value < 0.0f) {"]
+    .concat([ORIGINAL_LINES[CALIBRATION_LINE]]);
+  var NON_OPTIMAL_NO_ID_CODES = ["{0}", "{}"].map(function (init) {
+    var lines = ORIGINAL_LINES.slice();
+    lines[MEMBER_LINE] = "double value;";
+    lines[INIT_LINE] = "SensorPacket pkt" + init + ";";
+    lines.splice(ID_LINE, 1);
+    return lines.join("\n");
+  });
+
+  function isNonOptimalSolution(code, lines) {
+    if (NON_OPTIMAL_NO_ID_CODES.indexOf(code) !== -1) return true;
+    if (lines.length !== ORIGINAL_LINES.length) return false;
+    for (var i = 0; i < lines.length; i++) {
+      var allowed;
+      if (i === MEMBER_LINE) allowed = NON_OPTIMAL_MEMBERS;
+      else if (i === DIVISION_LINE) allowed = NON_OPTIMAL_DIVISIONS;
+      else if (i === CALIBRATION_LINE) allowed = NON_OPTIMAL_CALIBRATIONS;
+      else allowed = [ORIGINAL_LINES[i]];
+      if (allowed.indexOf(lines[i]) === -1) return false;
+    }
+    return true;
+  }
+
   var FLOAT_CODE = withMemberType("float");
   var DOUBLE_CODE = withMemberType("double");
   var FLOAT_EDIT_DISTANCE = levenshtein(ORIGINAL_CODE, FLOAT_CODE);
@@ -498,7 +531,7 @@ int main() {
     }
 
     if (code === FLOAT_CODE && levenshtein(ORIGINAL_CODE, code) === FLOAT_EDIT_DISTANCE) {
-      return { ok: true, text: "Build & Run Succeeded! Output: 32 bytes transmitted. (Solved in 5 edits)" };
+      return { ok: true, text: "Build & Run Succeeded! Output: 32 bytes transmitted. (Solved in 4 edits)" };
     }
 
     if (code === DOUBLE_CODE) {
@@ -506,6 +539,11 @@ int main() {
     }
 
     var lines = code.split("\n");
+
+    if (isNonOptimalSolution(code, lines)) {
+      return { ok: false, warn: true, text: "Build & Run Succeeded, but this solution is not optimal. You can do better." };
+    }
+
     if (lines.length === ORIGINAL_LINES.length) {
       var changed = [];
       for (var i = 0; i < lines.length; i++) {
@@ -583,7 +621,7 @@ int main() {
     cmd.className = "term-cmd";
     cmd.textContent = "$ g++ -std=c++17 main.cpp -o main && ./main\n";
     var out = document.createElement("span");
-    out.className = result.ok ? "term-ok" : "term-err";
+    out.className = result.ok ? "term-ok" : result.warn ? "term-warn" : "term-err";
     out.textContent = result.text;
     term.appendChild(cmd);
     term.appendChild(out);
@@ -594,7 +632,7 @@ int main() {
     box.innerHTML = "";
     var fails = ts.compileFails || 0;
     var hints = [];
-    if (fails >= 5) hints.push("[HINT 1]: You need to change exactly 5 characters.");
+    if (fails >= 5) hints.push("[HINT 1]: You need to change exactly 4 characters.");
     if (fails >= 10) hints.push("[HINT 2]: Pay close attention to the data type.");
     hints.forEach(function (text) {
       var div = document.createElement("div");
