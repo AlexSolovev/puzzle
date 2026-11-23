@@ -74,7 +74,7 @@ pre.console { margin: 0; border: 0; border-radius: 0; min-height: 90px; white-sp
 .term-err { color: var(--danger); }
 .term-warn { color: var(--warn); }
 .term-hint { padding: 8px 14px; color: var(--warn); border-top: 1px solid var(--border); }
-pre.terminal { font-size: 18px; line-height: 1.9; padding: 20px; }
+pre.terminal { font-size: 22px; line-height: 2.1; padding: 20px; }
 pre { background: #0a0e13; border: 1px solid var(--border); border-radius: 6px; padding: 12px; overflow-x: auto; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 input[type="text"] {
@@ -286,8 +286,7 @@ ul.achievements li::before { content: "[x] "; color: var(--accent); }
           ["0", "?", "?"]
         ];
         var text = rows.map(function (r) {
-          var seq = [r[0], r[0], r[0], r[0], r[0], r[0], r[0], r[0], r[0], r[0]].join(", ");
-          return seq + "... = " + (ts.hintShown ? r[2] : r[1]);
+          return r[0] + "<sup>\u03c9</sup> = " + (ts.hintShown ? r[2] : r[1]);
         }).join("\n");
         return '<pre class="terminal">' + text + '</pre>';
       },
