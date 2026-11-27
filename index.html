@@ -109,6 +109,9 @@ button.primary { background: var(--accent); color: var(--bg); }
 #answer-form.solved .msg { order: -1; margin-top: 0; }
 .msg.error { color: var(--danger); }
 .msg.success { color: var(--accent); }
+.msg.warn { color: var(--warn); }
+input[type="text"].warning { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+input[type="text"].warning:focus { outline-color: var(--warn); }
 .msg.hint { color: var(--warn); padding: 10px 12px; border: 1px solid var(--warn); border-radius: 6px; }
 input[type="text"].invalid { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 input[type="text"].invalid:focus { outline-color: var(--danger); }
@@ -295,11 +298,17 @@ ul.achievements li::before { content: "[x] "; color: var(--accent); }
         }).join("\n");
         return '<pre class="terminal">' + text + '</pre>';
       },
-      answers: ["4"],
+      answers: ["A000004"],
       hint: null,
+      errorKind: function (value) {
+        return normalize(value) === "4" ? "warn" : null;
+      },
       errorMessage: function (value, ts) {
+        if (normalize(value) === "4") {
+          return "Well... that's technically right, but to make sure you didn't cheat, please enter the full ID.";
+        }
         if (ts.hintShown) {
-          return "Wrong answer. Hint: the answer is a number without leading zeros.";
+          return "Wrong answer. Hint: the answer is an ID in the same format as the ones shown above.";
         }
         return "Wrong answer. Try again.";
       },
@@ -735,10 +744,11 @@ int main() {
     m.className = "msg " + kind;
     m.textContent = text;
     $("answer").classList.toggle("invalid", kind === "error");
+    $("answer").classList.toggle("warning", kind === "warn");
   }
 
   function hideMessage() {
-    $("answer").classList.remove("invalid");
+    $("answer").classList.remove("invalid", "warning");
     $("message").className = "msg hidden";
   }
 
@@ -863,7 +873,7 @@ int main() {
   }
 
   $("answer").addEventListener("input", function () {
-    $("answer").classList.remove("invalid");
+    $("answer").classList.remove("invalid", "warning");
   });
 
   $("answer-form").addEventListener("submit", function (e) {
@@ -897,7 +907,8 @@ int main() {
       var errorText = task.errorMessage
         ? task.errorMessage($("answer").value.trim(), ts)
         : "Incorrect answer. Try again.";
-      showMessage("error", errorText);
+      var kind = (task.errorKind && task.errorKind($("answer").value)) || "error";
+      showMessage(kind, errorText);
       var errorImage = task.errorImage ? task.errorImage($("answer").value) : null;
       if (errorImage) {
         var gif = document.createElement("img");
